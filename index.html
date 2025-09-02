@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Chat AI — Website Chat dengan AI</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#8b5cf6;--muted:#9aa4b2;--bubble-user:#1f2937;--bubble-ai:#0b1220}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#071426 0%,#0f1724 100%);font-family:Inter,system-ui,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    .app{max-width:920px;margin:32px auto;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;padding:18px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
+    header{display:flex;align-items:center;gap:14px}
+    .logo{width:50px;height:50px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#06b6d4);display:flex;align-items:center;justify-content:center;color:white;font-weight:700}
+    h1{margin:0;font-size:18px;color:#fff}
+    p.lead{margin:0;color:var(--muted);font-size:13px}
+    .chat{height:60vh;overflow:auto;padding:12px 6px;margin-top:18px;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent);border:1px solid rgba(255,255,255,0.02)}
+    .msg{display:flex;gap:12px;margin:12px 4px}
+    .msg.user{justify-content:flex-end}
+    .avatar{width:36px;height:36px;border-radius:8px;background:rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:center;color:var(--muted);font-weight:600}
+    .bubble{max-width:72%;padding:10px 12px;border-radius:10px;color:#e6eef8;font-size:14px;line-height:1.45}
+    .bubble.ai{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.02)}
+    .bubble.user{background:linear-gradient(180deg, rgba(139,92,246,0.16), rgba(6,182,212,0.08));color:#fff}
+    .controls{display:flex;gap:8px;margin-top:12px}
+    textarea{flex:1;min-height:48px;max-height:160px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:#fff;resize:vertical}
+    button{padding:10px 14px;border-radius:8px;border:0;background:var(--accent);color:#fff;font-weight:600;cursor:pointer}
+    .small{font-size:12px;color:var(--muted);margin-top:8px}
+    .meta{display:flex;gap:8px;align-items:center;margin-left:auto}
+    @media (max-width:600px){.app{margin:12px;padding:12px}.chat{height:55vh}}
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div class="logo">AI</div>
+      <div>
+        <h1>Chat with AI — Mirip ChatGPT</h1>
+        <p class="lead">Situs simple untuk chat dengan model AI.</p>
+      </div>
+      <div class="meta">
+        <div class="small">Status: <span id="status">Idle</span></div>
+      </div>
+    </header>
+
+    <section class="chat" id="chat"></section>
+
+    <div class="controls">
+      <textarea id="prompt" placeholder="Tulis pesan..."></textarea>
+      <button id="send">Kirim</button>
+      <button id="clear">Bersihkan</button>
+    </div>
+    <div class="small">Privasi: jangan kirim data sensitif. Server harus mengamankan API key.</div>
+  </main>
+
+  <script>
+    const API_BASE = '/api'; // ganti ke URL backend jika terpisah
+
+    const chatEl = document.getElementById('chat')
+    const promptEl = document.getElementById('prompt')
+    const sendBtn = document.getElementById('send')
+    const clearBtn = document.getElementById('clear')
+    const statusEl = document.getElementById('status')
+
+    function appendMessage(text, who='ai'){
+      const msg = document.createElement('div')
+      msg.className = 'msg ' + (who === 'user' ? 'user' : 'ai')
+      const avatar = document.createElement('div')
+      avatar.className = 'avatar'
+      avatar.textContent = who === 'user' ? 'K' : 'AI'
+      const bubble = document.createElement('div')
+      bubble.className = 'bubble ' + (who === 'user' ? 'user' : 'ai')
+      bubble.innerHTML = text.replace(/\\n/g, '<br>')
+      if(who === 'user'){
+        msg.appendChild(avatar); msg.appendChild(bubble)
+      } else {
+        msg.appendChild(avatar); msg.appendChild(bubble)
+      }
+      chatEl.appendChild(msg)
+      chatEl.scrollTop = chatEl.scrollHeight
+    }
+
+    function setStatus(s){ statusEl.textContent = s }
+
+    async function sendMessage(){
+      const text = promptEl.value.trim()
+      if(!text) return
+      appendMessage(escapeHtml(text), 'user')
+      promptEl.value = ''
+      setStatus('Mengirim...')
+      appendTyping()
+      try{
+        const res = await fetch(API_BASE + '/chat', {
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({message:text})
+        })
+        if(!res.ok){ throw new Error('Server error: ' + res.status) }
+        const data = await res.json()
+        removeTyping()
+        if(data && data.reply){
+          appendMessage(escapeHtml(data.reply), 'ai')
+          setStatus('Selesai')
+        } else {
+          appendMessage('Tidak ada balasan dari server.', 'ai')
+          setStatus('Idle')
+        }
+      }catch(err){
+        removeTyping()
+        appendMessage('Error: ' + escapeHtml(err.message), 'ai')
+        setStatus('Error')
+      }
+    }
+
+    function appendTyping(){
+      const id = 'typing'
+      if(document.getElementById(id)) return
+      const el = document.createElement('div'); el.id = id; el.className='msg ai';
+      el.innerHTML = '<div class="avatar">AI</div><div class="bubble ai">Mengetik<span id="dots">.</span></div>'
+      chatEl.appendChild(el)
+      chatEl.scrollTop = chatEl.scrollHeight
+      let dots = 1
+      el._interval = setInterval(()=>{ document.getElementById('dots').textContent = '.'.repeat(dots); dots = dots % 3 + 1 }, 400)
+    }
+    function removeTyping(){ const el = document.getElementById('typing'); if(el){ clearInterval(el._interval); el.remove() } }
+
+    function escapeHtml(s){ return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])) }
+
+    sendBtn.addEventListener('click', sendMessage)
+    promptEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage() } })
+    clearBtn.addEventListener('click', ()=>{ chatEl.innerHTML=''; setStatus('Idle') })
+
+    appendMessage('Halo! Saya AI. Tanyakan apa saja 😊', 'ai')
+  </script>
+</body>
+</html>
